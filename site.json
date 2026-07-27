@@ -1,0 +1,29 @@
+{
+  "eyebrow": "VIGILANCIA METEOROLOGICA · MODELIZACION NUMERICA",
+  "title": "Visor ",
+  "titleAccent": "superficie WRF",
+  "titleOrg": "GADE-CSIC",
+  "subtitle": "WRF-ARW 500 m · Castellon · CLIMATOC-LAB, CIDE (CSIC–UV–GVA)",
+  "logo": "assets/climatoc-lab.png",
+  "logoHeight": 34,
+  "tag": "experimental",
+  "tagTitle": "Simulacion de investigacion. No es un producto operativo ni sustituye a la informacion oficial de AEMET o de Proteccion Civil.",
+  "links": [
+    {
+      "label": "CLIMATOC-LAB",
+      "url": "https://climatoclab.csic.es/"
+    },
+    {
+      "label": "Estaciones en emergencias",
+      "url": "https://climatoclab.csic.es/emergencias/"
+    }
+  ],
+  "credits": [
+    "Simulaciones WRF-ARW: CLIMATOC-LAB, CIDE (CSIC–UV–GVA), en el marco de la actuacion de Gestion de Emergencias y Desastres del CSIC (GADE).",
+    "Condiciones iniciales y de contorno: NCEP GFS 0.25°, dominio publico.",
+    "Lineas limite municipales © Instituto Geografico Nacional, CC BY 4.0, via es-atlas (MIT).",
+    "Renderizado con three.js r169 (MIT)."
+  ],
+  "stations": [],
+  "stationIcon": "anemometro"
+}

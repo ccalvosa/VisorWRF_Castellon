@@ -1,0 +1,381 @@
+{
+ "format": "wrf-surface-pack/1",
+ "generated": "2026-07-27T21:34:34Z",
+ "title": "Incendio de Castell\u00f3n \u2014 WRF 500 m",
+ "note": "Ciclo 12Z 27/07/2026 \u00b7 uso interno",
+ "grid": {
+  "nx": 501,
+  "ny": 501,
+  "dx": 500.0,
+  "dy": 500.0,
+  "grid_id": 3,
+  "cen_lat": 39.944976806640625,
+  "cen_lon": 0.07537841796875,
+  "map_proj": "Lambert Conformal",
+  "init": "2026-07-27T12:00:00Z",
+  "model": "OUTPUT FROM WRF V4.5 MODEL"
+ },
+ "times": [
+  "2026-07-27T18:00:00Z",
+  "2026-07-27T19:00:00Z",
+  "2026-07-27T20:00:01Z",
+  "2026-07-27T21:00:00Z",
+  "2026-07-27T22:00:01Z",
+  "2026-07-27T23:00:00Z",
+  "2026-07-28T00:00:00Z",
+  "2026-07-28T01:00:00Z",
+  "2026-07-28T02:00:01Z",
+  "2026-07-28T03:00:01Z",
+  "2026-07-28T04:00:01Z",
+  "2026-07-28T05:00:01Z",
+  "2026-07-28T06:00:00Z",
+  "2026-07-28T07:00:00Z",
+  "2026-07-28T08:00:00Z",
+  "2026-07-28T09:00:00Z"
+ ],
+ "static": {
+  "terrain": {
+   "file": "static/terrain.png",
+   "vmin": -1.2631990909576416,
+   "vmax": 1955.140625
+  },
+  "lat": {
+   "file": "static/lat.png",
+   "vmin": 38.80751037597656,
+   "vmax": 41.0696907043457
+  },
+  "lon": {
+   "file": "static/lon.png",
+   "vmin": -1.40997314453125,
+   "vmax": 1.571685791015625
+  },
+  "landmask": {
+   "file": "static/landmask.png",
+   "vmin": 0.0,
+   "vmax": 1.0
+  }
+ },
+ "fields": [
+  {
+   "key": "wspd10",
+   "label": "Viento 10 m",
+   "units": "m/s",
+   "cmap": "wind",
+   "vmin": -2.5,
+   "vmax": 15.0,
+   "files": [
+    "wspd10/t000.png",
+    "wspd10/t001.png",
+    "wspd10/t002.png",
+    "wspd10/t003.png",
+    "wspd10/t004.png",
+    "wspd10/t005.png",
+    "wspd10/t006.png",
+    "wspd10/t007.png",
+    "wspd10/t008.png",
+    "wspd10/t009.png",
+    "wspd10/t010.png",
+    "wspd10/t011.png",
+    "wspd10/t012.png",
+    "wspd10/t013.png",
+    "wspd10/t014.png",
+    "wspd10/t015.png"
+   ]
+  },
+  {
+   "key": "gust10",
+   "label": "Racha max. 10 m",
+   "units": "m/s",
+   "cmap": "wind",
+   "vmin": -5.0,
+   "vmax": 20.0,
+   "files": [
+    "gust10/t000.png",
+    "gust10/t001.png",
+    "gust10/t002.png",
+    "gust10/t003.png",
+    "gust10/t004.png",
+    "gust10/t005.png",
+    "gust10/t006.png",
+    "gust10/t007.png",
+    "gust10/t008.png",
+    "gust10/t009.png",
+    "gust10/t010.png",
+    "gust10/t011.png",
+    "gust10/t012.png",
+    "gust10/t013.png",
+    "gust10/t014.png",
+    "gust10/t015.png"
+   ]
+  },
+  {
+   "key": "wchg10",
+   "label": "Cambio de viento 10 m",
+   "units": "m/s por hora",
+   "cmap": "dry",
+   "vmin": -2.0,
+   "vmax": 12.0,
+   "files": [
+    "wchg10/t000.png",
+    "wchg10/t001.png",
+    "wchg10/t002.png",
+    "wchg10/t003.png",
+    "wchg10/t004.png",
+    "wchg10/t005.png",
+    "wchg10/t006.png",
+    "wchg10/t007.png",
+    "wchg10/t008.png",
+    "wchg10/t009.png",
+    "wchg10/t010.png",
+    "wchg10/t011.png",
+    "wchg10/t012.png",
+    "wchg10/t013.png",
+    "wchg10/t014.png",
+    "wchg10/t015.png"
+   ]
+  },
+  {
+   "key": "t2",
+   "label": "Temperatura 2 m",
+   "units": "C",
+   "cmap": "thermal",
+   "vmin": 10.0,
+   "vmax": 35.0,
+   "files": [
+    "t2/t000.png",
+    "t2/t001.png",
+    "t2/t002.png",
+    "t2/t003.png",
+    "t2/t004.png",
+    "t2/t005.png",
+    "t2/t006.png",
+    "t2/t007.png",
+    "t2/t008.png",
+    "t2/t009.png",
+    "t2/t010.png",
+    "t2/t011.png",
+    "t2/t012.png",
+    "t2/t013.png",
+    "t2/t014.png",
+    "t2/t015.png"
+   ]
+  },
+  {
+   "key": "rh2",
+   "label": "Humedad relativa 2 m",
+   "units": "%",
+   "cmap": "moist",
+   "vmin": 0.0,
+   "vmax": 100.0,
+   "files": [
+    "rh2/t000.png",
+    "rh2/t001.png",
+    "rh2/t002.png",
+    "rh2/t003.png",
+    "rh2/t004.png",
+    "rh2/t005.png",
+    "rh2/t006.png",
+    "rh2/t007.png",
+    "rh2/t008.png",
+    "rh2/t009.png",
+    "rh2/t010.png",
+    "rh2/t011.png",
+    "rh2/t012.png",
+    "rh2/t013.png",
+    "rh2/t014.png",
+    "rh2/t015.png"
+   ]
+  },
+  {
+   "key": "td2",
+   "label": "Punto de rocio 2 m",
+   "units": "C",
+   "cmap": "moist",
+   "vmin": 0.0,
+   "vmax": 25.0,
+   "files": [
+    "td2/t000.png",
+    "td2/t001.png",
+    "td2/t002.png",
+    "td2/t003.png",
+    "td2/t004.png",
+    "td2/t005.png",
+    "td2/t006.png",
+    "td2/t007.png",
+    "td2/t008.png",
+    "td2/t009.png",
+    "td2/t010.png",
+    "td2/t011.png",
+    "td2/t012.png",
+    "td2/t013.png",
+    "td2/t014.png",
+    "td2/t015.png"
+   ]
+  },
+  {
+   "key": "pblh",
+   "label": "Altura capa limite",
+   "units": "m",
+   "cmap": "depth",
+   "vmin": 0.0,
+   "vmax": 3000.0,
+   "files": [
+    "pblh/t000.png",
+    "pblh/t001.png",
+    "pblh/t002.png",
+    "pblh/t003.png",
+    "pblh/t004.png",
+    "pblh/t005.png",
+    "pblh/t006.png",
+    "pblh/t007.png",
+    "pblh/t008.png",
+    "pblh/t009.png",
+    "pblh/t010.png",
+    "pblh/t011.png",
+    "pblh/t012.png",
+    "pblh/t013.png",
+    "pblh/t014.png",
+    "pblh/t015.png"
+   ]
+  },
+  {
+   "key": "u10",
+   "label": "Componente u 10 m",
+   "units": "m/s",
+   "cmap": "diverge",
+   "vmin": -15.0,
+   "vmax": 15.0,
+   "files": [
+    "u10/t000.png",
+    "u10/t001.png",
+    "u10/t002.png",
+    "u10/t003.png",
+    "u10/t004.png",
+    "u10/t005.png",
+    "u10/t006.png",
+    "u10/t007.png",
+    "u10/t008.png",
+    "u10/t009.png",
+    "u10/t010.png",
+    "u10/t011.png",
+    "u10/t012.png",
+    "u10/t013.png",
+    "u10/t014.png",
+    "u10/t015.png"
+   ]
+  },
+  {
+   "key": "v10",
+   "label": "Componente v 10 m",
+   "units": "m/s",
+   "cmap": "diverge",
+   "vmin": -15.0,
+   "vmax": 15.0,
+   "files": [
+    "v10/t000.png",
+    "v10/t001.png",
+    "v10/t002.png",
+    "v10/t003.png",
+    "v10/t004.png",
+    "v10/t005.png",
+    "v10/t006.png",
+    "v10/t007.png",
+    "v10/t008.png",
+    "v10/t009.png",
+    "v10/t010.png",
+    "v10/t011.png",
+    "v10/t012.png",
+    "v10/t013.png",
+    "v10/t014.png",
+    "v10/t015.png"
+   ]
+  },
+  {
+   "key": "gust10_max",
+   "label": "Racha maxima de la simulacion",
+   "units": "m/s",
+   "cmap": "wind",
+   "vmin": 0.0,
+   "vmax": 17.5,
+   "files": [
+    "summary/gust10_max.png"
+   ],
+   "single": true
+  },
+  {
+   "key": "gust10_max_hora",
+   "label": "Racha maxima de la simulacion \u00b7 hora",
+   "units": "h desde el inicio",
+   "cmap": "hours",
+   "vmin": 0.0,
+   "vmax": 15.0,
+   "files": [
+    "summary/gust10_max_hora.png"
+   ],
+   "single": true
+  },
+  {
+   "key": "wchg10_max",
+   "label": "Cambio de viento maximo",
+   "units": "m/s por hora",
+   "cmap": "dry",
+   "vmin": 0.0,
+   "vmax": 12.0,
+   "files": [
+    "summary/wchg10_max.png"
+   ],
+   "single": true
+  },
+  {
+   "key": "wchg10_max_hora",
+   "label": "Cambio de viento maximo \u00b7 hora",
+   "units": "h desde el inicio",
+   "cmap": "hours",
+   "vmin": 1.0,
+   "vmax": 15.0,
+   "files": [
+    "summary/wchg10_max_hora.png"
+   ],
+   "single": true
+  }
+ ],
+ "meteo": {
+  "stride": 4,
+  "nx": 126,
+  "ny": 126,
+  "vars": [
+   {
+    "key": "t2",
+    "label": "Temperatura 2 m",
+    "units": "C",
+    "vmin": 13.570404052734375,
+    "vmax": 33.647430419921875,
+    "file": "meteo/t2.png"
+   },
+   {
+    "key": "rh2",
+    "label": "Humedad relativa 2 m",
+    "units": "%",
+    "vmin": 18.188373565673828,
+    "vmax": 100.0,
+    "file": "meteo/rh2.png"
+   },
+   {
+    "key": "u10",
+    "label": "Componente u 10 m",
+    "units": "m/s",
+    "vmin": -9.242152214050293,
+    "vmax": 11.191675186157227,
+    "file": "meteo/u10.png"
+   },
+   {
+    "key": "v10",
+    "label": "Componente v 10 m",
+    "units": "m/s",
+    "vmin": -7.8625288009643555,
+    "vmax": 10.470894813537598,
+    "file": "meteo/v10.png"
+   }
+  ]
+ }
+}
