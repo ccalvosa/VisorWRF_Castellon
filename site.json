@@ -1,29 +1,24 @@
 {
-  "eyebrow": "VIGILANCIA METEOROLOGICA · MODELIZACION NUMERICA",
-  "title": "Visor ",
-  "titleAccent": "superficie WRF",
-  "titleOrg": "GADE-CSIC",
-  "subtitle": "WRF-ARW 500 m · Castellon · CLIMATOC-LAB, CIDE (CSIC–UV–GVA)",
+  "kicker": "Vigilancia meteorologica \u00b7 modelizacion numerica",
+  "title": "WRF-ARW 500-m | Climatoc-Lab",
+  "titleHtml": "WRF-ARW <span class=\"a1\">500-m</span> <span class=\"sep\">|</span> <span class=\"a2\">Climatoc-Lab</span>",
+  "org": "CIDE (CSIC\u2013UV\u2013GVA)",
   "logo": "assets/climatoc-lab.png",
-  "logoHeight": 34,
+  "logoHeight": 26,
+  "liveLabel": "Pronostico",
+  "accent": "#f2662a",
+  "accent2": "#3d9be0",
+  "stationIcon": "anemometro",
   "tag": "experimental",
   "tagTitle": "Simulacion de investigacion. No es un producto operativo ni sustituye a la informacion oficial de AEMET o de Proteccion Civil.",
   "links": [
-    {
-      "label": "CLIMATOC-LAB",
-      "url": "https://climatoclab.csic.es/"
-    },
-    {
-      "label": "Estaciones en emergencias",
-      "url": "https://climatoclab.csic.es/emergencias/"
-    }
+    { "label": "CLIMATOC-LAB", "url": "https://climatoclab.csic.es/" }
   ],
   "credits": [
-    "Simulaciones WRF-ARW: CLIMATOC-LAB, CIDE (CSIC–UV–GVA), en el marco de la actuacion de Gestion de Emergencias y Desastres del CSIC (GADE).",
-    "Condiciones iniciales y de contorno: NCEP GFS 0.25°, dominio publico.",
-    "Lineas limite municipales © Instituto Geografico Nacional, CC BY 4.0, via es-atlas (MIT).",
+    "Simulaciones WRF-ARW: Laboratorio de Clima, Atmosfera y Oceano (CLIMATOC-LAB), CIDE (CSIC\u2013UV\u2013GVA).",
+    "Condiciones iniciales y de contorno: NCEP GFS 0.25\u00b0, dominio publico.",
+    "Focos termicos: NASA FIRMS (VIIRS/MODIS), near real-time.",
+    "Lineas limite municipales \u00a9 Instituto Geografico Nacional, CC BY 4.0, via es-atlas (MIT).",
     "Renderizado con three.js r169 (MIT)."
-  ],
-  "stations": [],
-  "stationIcon": "anemometro"
+  ]
 }
