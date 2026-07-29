@@ -202,17 +202,19 @@
   #sndcv{display:block;width:100%;height:300px;cursor:crosshair}
   #sndfoot{padding:5px 10px 7px;font-size:10px;color:var(--fg-faint);
     border-top:1px solid var(--line);line-height:1.45}
-  #skt{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-    z-index:30;background:var(--panel);border:1px solid var(--line);
-    border-top:2px solid var(--accent);width:min(520px,92vw)}
+  /* No es modal a proposito: con un velo por encima no se puede tocar el
+     control de tiempo, y la gracia del panel es mover el slider y ver el
+     sondeo cambiar. Va arriba a la derecha para no tapar ni la barra de
+     tiempo de abajo ni el panel de tiempo-altura. */
+  #skt{position:fixed;top:60px;right:12px;
+    z-index:27;background:var(--panel);border:1px solid var(--line);
+    border-top:2px solid var(--accent);width:min(430px,42vw)}
   #skt[hidden]{display:none}
-  #sktveil{position:fixed;inset:0;z-index:29;background:rgba(8,11,14,.55)}
-  #sktveil[hidden]{display:none}
   #skthead{display:flex;align-items:center;justify-content:space-between;
     padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);font-size:11px}
   #skthead button{width:24px;flex:none;border:0;background:transparent;
     font-size:15px;line-height:1;color:var(--fg-dim);cursor:pointer;padding:0}
-  #sktcv{display:block;width:100%;height:420px}
+  #sktcv{display:block;width:100%;height:430px}
   #sktfoot{padding:5px 10px 7px;font-size:10px;color:var(--fg-faint);
     border-top:1px solid var(--line);line-height:1.45}
   #sndhead .btn{width:auto;padding:1px 8px;font-size:10px;
@@ -381,7 +383,6 @@
   <div id="sndfoot"></div>
 </div>
 
-<div id="sktveil" hidden></div>
 <div id="skt" hidden>
   <div id="skthead">
     <span id="skttitle">Skew-T</span>
@@ -1390,12 +1391,12 @@ function bindUI(){
     if (!$('skt').hidden) drawSkewT();
   });
   $('sndx').onclick = () => { $('snd').hidden = true; buildSoundMarks(); };
-  const closeSkt = () => { $('skt').hidden = true; $('sktveil').hidden = true; };
   $('sktopen').onclick = () => {
-    $('skt').hidden = false; $('sktveil').hidden = false; drawSkewT();
+    const on = $('skt').hidden;
+    $('skt').hidden = !on;
+    if (on) drawSkewT();
   };
-  $('sktx').onclick = closeSkt;
-  $('sktveil').onclick = closeSkt;
+  $('sktx').onclick = () => { $('skt').hidden = true; };
   $('sndcv').addEventListener('mousemove', sndPick);
   $('sndcv').addEventListener('mouseleave', () => {
     if (SND.hover){ SND.hover = null; drawSounding(); }
@@ -1420,7 +1421,7 @@ function bindUI(){
     if (e.key.toLowerCase() === 'm'){ openMeteogram(); }
     if (e.key.toLowerCase() === 's'){ openSounding(); }
     if (e.key === 'Escape'){
-      if (!$('skt').hidden){ $('skt').hidden = true; $('sktveil').hidden = true; }
+      if (!$('skt').hidden){ $('skt').hidden = true; }
       else { $('mgram').hidden = true; $('snd').hidden = true; buildSoundMarks(); }
       $('info').hidden = true; $('infoveil').hidden = true;
     }
@@ -2716,7 +2717,13 @@ function buildSoundMarks(){
  * sondeo de capas bajas. No sirve para CAPE ni para nada que necesite la
  * columna entera.
  */
-const SKEW_PX = 0.85;       // pixeles de desplazamiento horizontal por pixel de altura
+// Oblicuidad: pixeles de desplazamiento horizontal por pixel de altura. El
+// Skew-T clasico usa 1.0 (isotermas a 45 grados), pensado para leer adiabatas
+// sobre papel. Aqui solo se dibujan T y Td, asi que un sesgado tan fuerte solo
+// dificulta comparar temperaturas entre niveles. Con 0.35 las isotermas quedan
+// casi verticales y el perfil se lee de un vistazo, conservando lo unico que
+// el sesgado aporta de verdad: que T y Td no se solapen cerca de la saturacion.
+const SKEW_PX = 0.35;
 
 function drawSkewT(){
   if (!SND.data || $('skt').hidden) return;
@@ -2745,7 +2752,7 @@ function drawSkewT(){
   }
   const t0 = Math.floor((tmin - 4)/5)*5;
   const span = Math.max(25, Math.ceil((tmax + 4 - t0)/5)*5);
-  const skew = Math.min(SKEW_PX, pw/ph*0.6);
+  const skew = Math.min(SKEW_PX, pw/ph*0.5);
   const sx = (pw - ph*skew)/span;
   const X = (temp, yy) => L + (temp - t0)*sx + (T + ph - yy)*skew;
 
@@ -2803,6 +2810,38 @@ function drawSkewT(){
   }
   c.textAlign = 'left'; c.fillText('hPa', 4, T+7);
 
+  // alturas sobre el terreno, interpoladas en presion. Es lo que el operativo
+  // lee de verdad: la cota a la que puede volar, no el nivel de presion.
+  const zOf = pp => {
+    if (pp >= PR[0]) return Z[0];
+    for (let k=0;k<PR.length-1;k++)
+      if (pp >= PR[k+1]){
+        const f = (PR[k] - pp)/Math.max(PR[k] - PR[k+1], 1e-6);
+        return Z[k] + f*(Z[k+1] - Z[k]);
+      }
+    return Z[Z.length-1];
+  };
+  const pOfZ = zz => {
+    if (zz <= Z[0]) return PR[0];
+    for (let k=0;k<Z.length-1;k++)
+      if (zz <= Z[k+1]){
+        const f = (zz - Z[k])/Math.max(Z[k+1] - Z[k], 1e-6);
+        return PR[k] + f*(PR[k+1] - PR[k]);
+      }
+    return PR[PR.length-1];
+  };
+  const ztopReal = zOf(p1);
+  const zst = ztopReal > 3000 ? 1000 : 500;
+  c.fillStyle = '#8fa3b3'; c.textAlign = 'left';
+  for (let zz = 0; zz <= ztopReal; zz += zst){
+    const y = Y(pOfZ(zz));
+    if (y < T + 8 || y > T + ph - 2) continue;
+    c.strokeStyle = '#8fa3b3'; c.globalAlpha = .5; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(L+2, y); c.lineTo(L+14, y); c.stroke();
+    c.globalAlpha = 1;
+    c.fillText(zz >= 1000 ? (zz/1000) + ' km' : zz + ' m', L+17, y+3);
+  }
+
   // temperaturas en el eje inferior, siguiendo la oblicuidad
   c.textAlign = 'center'; c.fillStyle = mid;
   for (let tv = t0; tv <= t0 + span; tv += 5){
@@ -2839,7 +2878,8 @@ function drawSkewT(){
     + `${TD[0].toFixed(1)}\u00b0C \u00b7 mezcla ${mh.toFixed(0)} m`;
   $('sktfoot').textContent =
     'Skew-T log-P del instante que marca el control de tiempo: mueve el slider '
-    + 'y el sondeo cambia. La linea discontinua es la altura de mezcla. El '
+    + 'o usa las flechas del teclado y el sondeo cambia con el mapa. La linea '
+    + 'discontinua es la altura de mezcla. El '
     + 'perfil llega solo hasta ' + SND.data.ztop.toFixed(0) + ' m sobre el '
     + 'terreno, asi que es un sondeo de capas bajas: no sirve para CAPE ni para '
     + 'nada que necesite la columna entera.';
