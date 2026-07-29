@@ -1397,6 +1397,11 @@ function bindUI(){
     if (on) drawSkewT();
   };
   $('sktx').onclick = () => { $('skt').hidden = true; };
+  $('sktcv').style.cursor = 'crosshair';
+  $('sktcv').addEventListener('mousemove', sktPick);
+  $('sktcv').addEventListener('mouseleave', () => {
+    if (SKT.k !== null){ SKT.k = null; drawSkewT(); }
+  });
   $('sndcv').addEventListener('mousemove', sndPick);
   $('sndcv').addEventListener('mouseleave', () => {
     if (SND.hover){ SND.hover = null; drawSounding(); }
@@ -2724,6 +2729,7 @@ function buildSoundMarks(){
 // casi verticales y el perfil se lee de un vistazo, conservando lo unico que
 // el sesgado aporta de verdad: que T y Td no se solapen cerca de la saturacion.
 const SKEW_PX = 0.35;
+const SKT = { k:null, geo:null };
 
 function drawSkewT(){
   if (!SND.data || $('skt').hidden) return;
@@ -2744,7 +2750,9 @@ function drawSkewT(){
   const PR = p.p[t], TT = p.t[t], TD = p.td[t], UU = p.u[t], VV = p.v[t];
   const Z = p.z[t], TH = p.theta[t];
   const p0 = PR[0], p1 = PR[PR.length-1];
-  const Y = pp => T + ph*Math.log(p0/Math.max(pp, 1))/Math.log(p0/p1);
+  // superficie abajo, techo arriba: log(p0/pp) crece hacia arriba, asi que
+  // hay que restarlo del borde inferior, no sumarlo al superior.
+  const Y = pp => T + ph - ph*Math.log(p0/Math.max(pp, 1))/Math.log(p0/p1);
 
   let tmin = Infinity, tmax = -Infinity;
   for (let k=0;k<TT.length;k++){
@@ -2755,6 +2763,9 @@ function drawSkewT(){
   const skew = Math.min(SKEW_PX, pw/ph*0.5);
   const sx = (pw - ph*skew)/span;
   const X = (temp, yy) => L + (temp - t0)*sx + (T + ph - yy)*skew;
+  // el picker necesita la misma geometria; guardarla evita que las dos
+  // copias se separen al tocar margenes o sesgado
+  SKT.geo = { L, T, pw, ph, Y, X };
 
   const CSS = getComputedStyle(document.documentElement);
   const mid  = CSS.getPropertyValue('--fg-dim').trim() || '#7d8c9a';
@@ -2869,6 +2880,54 @@ function drawSkewT(){
   c.fillStyle = mid; c.textAlign = 'center';
   c.fillText('viento', wx, T - 2);
 
+  // lectura bajo el cursor
+  if (SKT.k !== null && SKT.k >= 0 && SKT.k < PR.length){
+    const k = SKT.k, y = Y(PR[k]);
+    const xt = X(TT[k], y), xd = X(TD[k], y);
+    c.save();
+    c.beginPath(); c.rect(L, T, pw, ph); c.clip();
+    c.strokeStyle = '#f2f6f8'; c.lineWidth = 1; c.setLineDash([3,3]);
+    c.beginPath(); c.moveTo(L, y); c.lineTo(L+pw, y); c.stroke();
+    c.setLineDash([]);
+    for (const [xx, col] of [[xd, C_D], [xt, C_T]]){
+      c.fillStyle = col; c.strokeStyle = '#11161b'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(xx, y, 3.6, 0, 6.2832); c.fill(); c.stroke();
+    }
+    c.restore();
+
+    // humedad relativa desde T y Td, Bolton
+    const es = 6.112*Math.exp(17.67*TT[k]/(TT[k] + 243.5));
+    const ee = 6.112*Math.exp(17.67*TD[k]/(TD[k] + 243.5));
+    const rh = Math.max(0, Math.min(100, 100*ee/es));
+    const spd = Math.hypot(UU[k], VV[k]);
+    const dir = (Math.atan2(-UU[k], -VV[k])*180/Math.PI + 360) % 360;
+    const rows = [
+      ['z',  Z[k].toFixed(0) + ' m'],
+      ['p',  PR[k].toFixed(0) + ' hPa'],
+      ['T',  TT[k].toFixed(1) + ' \u00b0C'],
+      ['Td', TD[k].toFixed(1) + ' \u00b0C'],
+      ['HR', rh.toFixed(0) + ' %'],
+      ['V',  spd.toFixed(1) + ' m/s ' + rumbo(dir)],
+    ];
+    c.font = '10px ui-monospace, Menlo, Consolas, monospace';
+    let bw = 0;
+    for (const [kk, vv] of rows) bw = Math.max(bw, c.measureText(kk + '  ' + vv).width);
+    bw += 16;
+    const bh = rows.length*13 + 8;
+    const bx = Math.min(L + pw - bw - 4, Math.max(L + 4, xt + 12));
+    const by = y + 8 + bh > T + ph ? y - 8 - bh : y + 8;
+    c.fillStyle = 'rgba(23,30,37,.94)'; c.fillRect(bx, by, bw, bh);
+    c.strokeStyle = line; c.lineWidth = 1;
+    c.strokeRect(Math.round(bx)+.5, Math.round(by)+.5, bw, bh);
+    rows.forEach(([kk, vv], r) => {
+      const yy = by + 15 + r*13;
+      c.textAlign = 'left'; c.fillStyle = mid; c.fillText(kk, bx + 8, yy);
+      c.textAlign = 'right';
+      c.fillStyle = kk === 'T' ? C_T : kk === 'Td' ? C_D : '#e8edf1';
+      c.fillText(vv, bx + bw - 8, yy);
+    });
+  }
+
   const hh = SND.data.times[t].slice(11,16);
   $('skttitle').innerHTML =
     `${p.name} \u00b7 ${SND.data.times[t].slice(0,10)} ${hh} UTC \u00b7 `
@@ -2883,6 +2942,30 @@ function drawSkewT(){
     + 'perfil llega solo hasta ' + SND.data.ztop.toFixed(0) + ' m sobre el '
     + 'terreno, asi que es un sondeo de capas bajas: no sirve para CAPE ni para '
     + 'nada que necesite la columna entera.';
+}
+
+// El nivel se elige por proximidad vertical y no por la distancia al trazo: en
+// un sondeo se lee "a esta altura", y exigir acertar sobre la curva lo haria
+// inutilizable donde T y Td casi se tocan.
+function sktPick(ev){
+  if (!SND.data || $('skt').hidden || !SKT.geo) return;
+  const p = SND.data.points[SND.idx];
+  if (!p) return;
+  const t = Math.max(0, Math.min(p.theta.length-1, S.t));
+  const PR = p.p[t];
+  const g = SKT.geo;
+  const r = $('sktcv').getBoundingClientRect();
+  const y = ev.clientY - r.top, x = ev.clientX - r.left;
+  if (y < g.T - 4 || y > g.T + g.ph + 4 || x < g.L - 4 || x > g.L + g.pw + 4){
+    if (SKT.k !== null){ SKT.k = null; drawSkewT(); }
+    return;
+  }
+  let best = 0, bd = Infinity;
+  for (let k=0;k<PR.length;k++){
+    const d = Math.abs(g.Y(PR[k]) - y);
+    if (d < bd){ bd = d; best = k; }
+  }
+  if (SKT.k !== best){ SKT.k = best; drawSkewT(); }
 }
 
 function sndPick(ev){
