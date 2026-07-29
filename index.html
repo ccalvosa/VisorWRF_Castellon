@@ -202,6 +202,22 @@
   #sndcv{display:block;width:100%;height:300px;cursor:crosshair}
   #sndfoot{padding:5px 10px 7px;font-size:10px;color:var(--fg-faint);
     border-top:1px solid var(--line);line-height:1.45}
+  #skt{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:30;background:var(--panel);border:1px solid var(--line);
+    border-top:2px solid var(--accent);width:min(520px,92vw)}
+  #skt[hidden]{display:none}
+  #sktveil{position:fixed;inset:0;z-index:29;background:rgba(8,11,14,.55)}
+  #sktveil[hidden]{display:none}
+  #skthead{display:flex;align-items:center;justify-content:space-between;
+    padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);font-size:11px}
+  #skthead button{width:24px;flex:none;border:0;background:transparent;
+    font-size:15px;line-height:1;color:var(--fg-dim);cursor:pointer;padding:0}
+  #sktcv{display:block;width:100%;height:420px}
+  #sktfoot{padding:5px 10px 7px;font-size:10px;color:var(--fg-faint);
+    border-top:1px solid var(--line);line-height:1.45}
+  #sndhead .btn{width:auto;padding:1px 8px;font-size:10px;
+    border:1px solid var(--line);color:var(--fg-dim)}
+  #sndhead .btn:hover{color:var(--fg)}
   #credit{position:fixed;left:12px;bottom:0;padding:3px 6px;z-index:14;
     font-size:9.5px;color:var(--fg-faint);max-width:min(560px,68vw);
     pointer-events:none;line-height:1.3}
@@ -355,11 +371,24 @@
 <div id="snd" hidden>
   <div id="sndhead">
     <span id="sndtitle">Sondeo</span>
-    <button id="sndx" title="cerrar">&times;</button>
+    <span style="display:flex;gap:6px;align-items:center">
+      <button id="sktopen" class="btn" title="Skew-T del instante actual">Skew-T</button>
+      <button id="sndx" title="cerrar">&times;</button>
+    </span>
   </div>
   <div id="sndpts"></div>
   <canvas id="sndcv"></canvas>
   <div id="sndfoot"></div>
+</div>
+
+<div id="sktveil" hidden></div>
+<div id="skt" hidden>
+  <div id="skthead">
+    <span id="skttitle">Skew-T</span>
+    <button id="sktx" title="cerrar">&times;</button>
+  </div>
+  <canvas id="sktcv"></canvas>
+  <div id="sktfoot"></div>
 </div>
 
 <div id="ruler">
@@ -1161,6 +1190,11 @@ async function show(){
     // pintado del mapa
     try { if (!$('mgram').hidden) drawMeteogram(); }
     catch (e){ console.error('meteograma:', e); }
+    // el sondeo y el Skew-T siguen al control de tiempo
+    try {
+      if (!$('snd').hidden) drawSounding();
+      if (!$('skt').hidden) drawSkewT();
+    } catch (e){ console.error('sondeo:', e); }
     await updateWind();
     // prefetch del siguiente paso
     const next = (S.t+1) % S.man.times.length;
@@ -1270,6 +1304,7 @@ function setVex(v){
   updateWind();
   buildAdmin();
   buildFires();
+  buildSoundMarks();
 }
 
 function bindUI(){
@@ -1352,8 +1387,15 @@ function bindUI(){
   addEventListener('resize', () => {
     if (!$('mgram').hidden) drawMeteogram();
     if (!$('snd').hidden) drawSounding();
+    if (!$('skt').hidden) drawSkewT();
   });
-  $('sndx').onclick = () => { $('snd').hidden = true; };
+  $('sndx').onclick = () => { $('snd').hidden = true; buildSoundMarks(); };
+  const closeSkt = () => { $('skt').hidden = true; $('sktveil').hidden = true; };
+  $('sktopen').onclick = () => {
+    $('skt').hidden = false; $('sktveil').hidden = false; drawSkewT();
+  };
+  $('sktx').onclick = closeSkt;
+  $('sktveil').onclick = closeSkt;
   $('sndcv').addEventListener('mousemove', sndPick);
   $('sndcv').addEventListener('mouseleave', () => {
     if (SND.hover){ SND.hover = null; drawSounding(); }
@@ -1378,7 +1420,8 @@ function bindUI(){
     if (e.key.toLowerCase() === 'm'){ openMeteogram(); }
     if (e.key.toLowerCase() === 's'){ openSounding(); }
     if (e.key === 'Escape'){
-      $('mgram').hidden = true; $('snd').hidden = true;
+      if (!$('skt').hidden){ $('skt').hidden = true; $('sktveil').hidden = true; }
+      else { $('mgram').hidden = true; $('snd').hidden = true; buildSoundMarks(); }
       $('info').hidden = true; $('infoveil').hidden = true;
     }
   });
@@ -2394,6 +2437,8 @@ async function openSounding(){
   $('snd').hidden = false;
   buildSoundingChips();
   drawSounding();
+  buildSoundMarks();
+  if (!$('skt').hidden) drawSkewT();
 }
 
 function buildSoundingChips(){
@@ -2404,7 +2449,9 @@ function buildSoundingChips(){
     b.textContent = p.name;
     if (k === SND.idx) b.className = 'on';
     b.onclick = () => { SND.idx = k; SND.clickDist = null;
-                        buildSoundingChips(); drawSounding(); };
+                        buildSoundingChips(); drawSounding();
+                        buildSoundMarks();
+                        if (!$('skt').hidden) drawSkewT(); };
     box.appendChild(b);
   });
 }
@@ -2608,6 +2655,194 @@ function drawSounding(){
     + `solicitado. El modelo no incluye el humo, que atenua la radiacion y `
     + `frena el calentamiento: la ruptura real sera igual o mas tardia que la `
     + `de este grafico. Horas en UTC.`;
+}
+
+
+/* ---- marcadores del pool de sondeos ----
+ * El usuario pincha en un sitio y el sondeo que se abre es el del punto del
+ * pool mas cercano, que puede estar a cientos de metros. Sin ver donde esta
+ * ese punto, el grafico parece del sitio pinchado y no lo es.
+ */
+const SMK = { obj:null };
+
+function buildSoundMarks(){
+  if (SMK.obj){
+    scene.remove(SMK.obj);
+    SMK.obj.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    SMK.obj = null;
+  }
+  if (!SND.data || !SND.data.points.length || $('snd').hidden) return;
+  const grp = new THREE.Group();
+  const lift = 0.06 + 0.04*S.vex;
+  const r = S.W*0.006;
+  SND.data.points.forEach((p, k) => {
+    const g = latlonToGrid(p.lat, p.lon);
+    if (!g) return;
+    const [gi, gj] = g;
+    const e = sampleGrid(S.terrain, gi, gj);
+    const y = (Number.isFinite(e) ? e/1000*S.vex : 0) + lift;
+    const on = k === SND.idx;
+    const col = on ? 0xff5a1f : 0x8fa3b3;
+    const m = new THREE.LineBasicMaterial({ color:col, transparent:true,
+                                            opacity: on ? 1 : .5 });
+    // anillo en el suelo mas un mastil: el anillo situa, el mastil se ve de lejos
+    const pts = [];
+    for (let a=0; a<=24; a++){
+      const th = a/24*Math.PI*2;
+      pts.push(new THREE.Vector3(Math.cos(th)*r, 0, Math.sin(th)*r));
+    }
+    const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m);
+    const hh = on ? r*4 : r*2;
+    const mast = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,0,0), new THREE.Vector3(0,hh,0)]), m);
+    const o = new THREE.Group();
+    o.add(ring); o.add(mast);
+    o.position.set(worldX(gi), y, worldZ(gj));
+    o.renderOrder = 3;
+    grp.add(o);
+  });
+  SMK.obj = grp;
+  scene.add(grp);
+}
+
+/* ---- Skew-T log-P ----
+ * El tiempo-altura contesta "hasta que hora y hasta que altura". El Skew-T
+ * contesta "por que": si la capa es una inversion de superficie por
+ * enfriamiento radiativo o una subsidencia elevada, y cuanto le falta al aire
+ * para saturar. Se dibuja el instante que marca el control de tiempo, asi que
+ * el slider mueve tambien este panel.
+ *
+ * OJO: el perfil llega solo hasta ztop (4 km por defecto), asi que esto es un
+ * sondeo de capas bajas. No sirve para CAPE ni para nada que necesite la
+ * columna entera.
+ */
+const SKEW_PX = 0.85;       // pixeles de desplazamiento horizontal por pixel de altura
+
+function drawSkewT(){
+  if (!SND.data || $('skt').hidden) return;
+  const p = SND.data.points[SND.idx];
+  if (!p) return;
+  const t = Math.max(0, Math.min(p.theta.length-1, S.t));
+
+  const cv = $('sktcv'), dpr = Math.min(devicePixelRatio, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, W, H);
+
+  const L = 40, R = 54, T = 12, B = 26;
+  const pw = Math.max(W - L - R, 1), ph = Math.max(H - T - B, 1);
+
+  const PR = p.p[t], TT = p.t[t], TD = p.td[t], UU = p.u[t], VV = p.v[t];
+  const Z = p.z[t], TH = p.theta[t];
+  const p0 = PR[0], p1 = PR[PR.length-1];
+  const Y = pp => T + ph*Math.log(p0/Math.max(pp, 1))/Math.log(p0/p1);
+
+  let tmin = Infinity, tmax = -Infinity;
+  for (let k=0;k<TT.length;k++){
+    tmin = Math.min(tmin, TD[k]); tmax = Math.max(tmax, TT[k]);
+  }
+  const t0 = Math.floor((tmin - 4)/5)*5;
+  const span = Math.max(25, Math.ceil((tmax + 4 - t0)/5)*5);
+  const skew = Math.min(SKEW_PX, pw/ph*0.6);
+  const sx = (pw - ph*skew)/span;
+  const X = (temp, yy) => L + (temp - t0)*sx + (T + ph - yy)*skew;
+
+  const CSS = getComputedStyle(document.documentElement);
+  const mid  = CSS.getPropertyValue('--fg-dim').trim() || '#7d8c9a';
+  const line = CSS.getPropertyValue('--line').trim() || '#2b3742';
+  const C_T  = CSS.getPropertyValue('--accent').trim()  || '#ff5a1f';
+  const C_D  = CSS.getPropertyValue('--accent2').trim() || '#38a9e8';
+  c.font = '10px ui-monospace, Menlo, Consolas, monospace';
+
+  c.save();
+  c.beginPath(); c.rect(L, T, pw, ph); c.clip();
+
+  // isotermas oblicuas
+  c.strokeStyle = line; c.lineWidth = 1;
+  for (let tv = t0 - 40; tv <= t0 + span + 40; tv += 5){
+    c.beginPath();
+    c.moveTo(X(tv, T + ph), T + ph);
+    c.lineTo(X(tv, T), T);
+    c.stroke();
+  }
+  // isoterma de 0 C marcada
+  c.strokeStyle = '#5b7a8c'; c.lineWidth = 1.4;
+  c.beginPath(); c.moveTo(X(0, T+ph), T+ph); c.lineTo(X(0, T), T); c.stroke();
+
+  // altura de mezcla como referencia comun con el otro panel
+  const mh = mixHeightOf(Z, TH);
+  let kmh = 0; while (kmh < Z.length-1 && Z[kmh+1] < mh) kmh++;
+  const pmh = PR[kmh] + (PR[Math.min(kmh+1, PR.length-1)] - PR[kmh])
+              *((mh - Z[kmh])/Math.max(Z[Math.min(kmh+1, Z.length-1)] - Z[kmh], 1e-6));
+  c.strokeStyle = '#f2f6f8'; c.lineWidth = 1.4; c.setLineDash([4,3]);
+  c.beginPath(); c.moveTo(L, Y(pmh)); c.lineTo(L+pw, Y(pmh)); c.stroke();
+  c.setLineDash([]);
+
+  // perfiles
+  const draw = (arr, col) => {
+    c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath();
+    for (let k=0;k<arr.length;k++){
+      const y = Y(PR[k]), x = X(arr[k], y);
+      k ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.stroke();
+  };
+  draw(TD, C_D); draw(TT, C_T);
+  c.restore();
+
+  // ejes: presion a la izquierda, altura a la derecha del area de viento
+  c.fillStyle = mid; c.strokeStyle = line; c.lineWidth = 1;
+  c.textAlign = 'right';
+  const pst = (p0 - p1) > 250 ? 100 : 50;
+  for (let pp = Math.ceil(p1/pst)*pst; pp <= p0; pp += pst){
+    const y = Math.round(Y(pp)) + .5;
+    c.beginPath(); c.moveTo(L, y); c.lineTo(L+pw, y); c.stroke();
+    c.fillText(String(Math.round(pp)), L-5, y+3);
+  }
+  c.textAlign = 'left'; c.fillText('hPa', 4, T+7);
+
+  // temperaturas en el eje inferior, siguiendo la oblicuidad
+  c.textAlign = 'center'; c.fillStyle = mid;
+  for (let tv = t0; tv <= t0 + span; tv += 5){
+    const x = X(tv, T + ph);
+    if (x > L - 2 && x < L + pw + 2) c.fillText(String(tv), x, H - 12);
+  }
+  c.fillText('\u00b0C', L + pw/2, H - 2);
+
+  // columna de viento a la derecha
+  const wx = L + pw + 24;
+  c.strokeStyle = mid; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(wx, T); c.lineTo(wx, T+ph); c.stroke();
+  const every = Math.max(1, Math.ceil(PR.length/14));
+  for (let k=0;k<PR.length;k+=every){
+    const y = Y(PR[k]);
+    const sp = Math.hypot(UU[k], VV[k]);
+    const a = Math.atan2(-UU[k], -VV[k]) + Math.PI;   // hacia donde sopla
+    const ln = 4 + Math.min(9, sp*0.7);
+    const dx = Math.sin(a)*ln, dy = -Math.cos(a)*ln;
+    c.strokeStyle = '#d8dbde'; c.lineWidth = 1.3;
+    c.beginPath(); c.moveTo(wx-dx, y-dy); c.lineTo(wx+dx, y+dy); c.stroke();
+    c.beginPath(); c.arc(wx-dx, y-dy, 1.6, 0, 6.2832);
+    c.fillStyle = '#d8dbde'; c.fill();
+  }
+  c.fillStyle = mid; c.textAlign = 'center';
+  c.fillText('viento', wx, T - 2);
+
+  const hh = SND.data.times[t].slice(11,16);
+  $('skttitle').innerHTML =
+    `${p.name} \u00b7 ${SND.data.times[t].slice(0,10)} ${hh} UTC \u00b7 `
+    + `<span style="color:${C_T}">T</span> `
+    + `${TT[0].toFixed(1)}\u00b0C \u00b7 `
+    + `<span style="color:${C_D}">Td</span> `
+    + `${TD[0].toFixed(1)}\u00b0C \u00b7 mezcla ${mh.toFixed(0)} m`;
+  $('sktfoot').textContent =
+    'Skew-T log-P del instante que marca el control de tiempo: mueve el slider '
+    + 'y el sondeo cambia. La linea discontinua es la altura de mezcla. El '
+    + 'perfil llega solo hasta ' + SND.data.ztop.toFixed(0) + ' m sobre el '
+    + 'terreno, asi que es un sondeo de capas bajas: no sirve para CAPE ni para '
+    + 'nada que necesite la columna entera.';
 }
 
 function sndPick(ev){
