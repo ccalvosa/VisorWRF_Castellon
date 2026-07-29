@@ -121,6 +121,25 @@ def d_td2(nc, t):
 _LV = {"key": None, "data": None}
 G = 9.81
 
+# Diagnostico de inversion termica. Umbrales:
+#   GAMMA_INV  gradiente de theta a partir del cual una capa se considera
+#              estable. 5 K/km separa una inversion real de la estabilidad
+#              residual de una capa mezclada.
+#   Z_SEARCH   no se busca capa estable por encima de esto: lo que importa es
+#              la tapadera que atrapa el humo, no la tropopausa.
+#   PARCEL_EXC exceso de la parcela sobre theta a 2 m en el metodo de
+#              Holzworth. Representa la sobrecalefaccion de la superficie
+#              frente al aire de 2 m; 0,5 K es el valor habitual en
+#              meteorologia de dispersion.
+RD_CP      = 287.05/1004.5
+P0_PA      = 100000.0
+GAMMA_INV  = 0.005
+Z_SEARCH   = 3000.0
+PARCEL_EXC = 0.5
+
+_INV = {"key": None, "data": None}
+_MH  = {"key": None, "data": None}
+
 
 def levels(nc, t):
     """Devuelve (z_agl_masa, dz, tk, qv, p, u, v) del instante t.
@@ -196,6 +215,142 @@ def d_vent(nc, t):
     convertir.
     """
     return d_wtrans(nc, t)*np.asarray(nc.variables["PBLH"][t])
+
+
+# --------------------------------------------------------------------------
+# Inversion termica y altura de mezcla.
+#
+# La pregunta operativa es hasta que altura llega la capa que atrapa el humo y
+# a que hora se rompe, porque mientras esta cerrada los medios aereos no vuelan.
+# PBLH no la contesta: de noche, con MYNN, colapsa a decenas de metros y no dice
+# nada sobre donde esta la tapadera. Por eso aqui la altura de mezcla se calcula
+# por metodo de parcela (Holzworth), que es lo que usa la meteorologia de
+# dispersion y lo que se puede leer en un sondeo.
+#
+# Theta se deriva de tk y pres de wrf-python, no de la variable T del fichero,
+# por el mismo motivo que el resto de productos de niveles: con use_theta_m=1 no
+# esta garantizado que T sea la theta seca.
+# --------------------------------------------------------------------------
+
+def _theta(nc, t):
+    """Perfil de theta (K) y altura de niveles de masa (m sobre el terreno)."""
+    zm, _, tk, pr, _, _, _ = levels(nc, t)
+    return zm, tk*(P0_PA/np.maximum(pr, 1.0))**RD_CP
+
+
+def _inv_layer(nc, t):
+    """Primera capa estable contando desde el suelo.
+
+    Devuelve (hay, base, techo, dtheta) con base y techo en m sobre el terreno.
+    Se busca la PRIMERA capa, no la mas intensa: la que tapa el humo es la de
+    abajo, aunque haya otra mas marcada por encima.
+    """
+    key = (id(nc), t)
+    if _INV["key"] == key:
+        return _INV["data"]
+
+    zm, th = _theta(nc, t)
+    dz = np.diff(zm, axis=0)
+    dz = np.where(dz <= 0, np.nan, dz)
+    lapse = np.diff(th, axis=0)/dz
+
+    stable = np.isfinite(lapse) & (lapse >= GAMMA_INV) & (zm[:-1] < Z_SEARCH)
+    has = stable.any(axis=0)
+    kb = np.argmax(stable, axis=0)
+
+    # Techo: primer nivel no estable por encima de la base.
+    nz1 = stable.shape[0]
+    kidx = np.arange(nz1)[:, None, None]
+    unstab = (~stable) & (kidx >= kb[None, :, :])
+    has_top = unstab.any(axis=0)
+    kt = np.where(has_top, np.argmax(unstab, axis=0), nz1 - 1)
+
+    yy, xx = np.indices(kb.shape)
+    base = zm[kb, yy, xx]
+    top = zm[kt, yy, xx]
+    dth = th[kt, yy, xx] - th[kb, yy, xx]
+
+    out = (has, base, top, dth)
+    _INV["key"], _INV["data"] = key, out
+    return out
+
+
+def d_invtop(nc, t):
+    """Techo de la capa estable (m sobre el terreno). Cero = sin inversion.
+
+    Es la altura por debajo de la cual queda atrapado el humo. Cero significa
+    que no hay capa estable en los 3000 m mas bajos, es decir, que no hay
+    tapadera, no que este a ras de suelo.
+    """
+    has, _, top, _ = _inv_layer(nc, t)
+    return np.where(has, top, 0.0)
+
+
+def d_invdth(nc, t):
+    """Salto de theta a traves de la capa estable (K).
+
+    Es la intensidad de la inversion, y lo que decide si el calentamiento
+    diurno la va a poder romper. El espesor solo no basta: una capa gruesa y
+    debil se rompe antes que una fina e intensa.
+    """
+    has, _, _, dth = _inv_layer(nc, t)
+    return np.where(has, dth, 0.0)
+
+
+def d_mixh(nc, t):
+    """Altura de mezcla por metodo de parcela, Holzworth (m sobre el terreno).
+
+    Se sube una parcela con theta de 2 m mas PARCEL_EXC y se corta con el
+    perfil, interpolando linealmente entre niveles. Es lo que hay que comparar
+    con la cota a la que necesitan volar los medios aereos.
+    """
+    key = (id(nc), t)
+    if _MH["key"] == key:
+        return _MH["data"]
+
+    zm, th = _theta(nc, t)
+    t2 = np.asarray(nc.variables["T2"][t])
+    psfc = np.asarray(nc.variables["PSFC"][t])
+    thp = t2*(P0_PA/np.maximum(psfc, 1.0))**RD_CP + PARCEL_EXC
+
+    warmer = th >= thp[None, :, :]
+    has = warmer.any(axis=0)
+    k = np.argmax(warmer, axis=0)
+
+    yy, xx = np.indices(k.shape)
+    klo = np.maximum(k - 1, 0)
+    z_hi, th_hi = zm[k, yy, xx],   th[k, yy, xx]
+    z_lo, th_lo = zm[klo, yy, xx], th[klo, yy, xx]
+
+    d = th_hi - th_lo
+    f = np.clip(np.where(np.abs(d) > 1e-6, (thp - th_lo)/d, 0.0), 0.0, 1.0)
+    mh = z_lo + f*(z_hi - z_lo)
+
+    mh = np.where(k == 0, zm[0], mh)          # capa mas somera que el 1er nivel
+    mh = np.where(has, mh, zm[-1])            # sin corte: mezclado hasta arriba
+    out = np.asarray(mh, dtype=np.float32)
+    _MH["key"], _MH["data"] = key, out
+    return out
+
+
+def _transport_mixh(nc, t):
+    """Viento medio en 0..altura de mezcla, ponderado por espesor de capa."""
+    zm, dz, _, _, _, u, v = levels(nc, t)
+    mh = d_mixh(nc, t)
+    m = zm <= np.maximum(mh, zm[0] + 1.0)
+    w = np.where(m, dz, 0.0)
+    tot = np.maximum(w.sum(axis=0), 1e-6)
+    return (u*w).sum(axis=0)/tot, (v*w).sum(axis=0)/tot
+
+
+def d_ventmh(nc, t):
+    """Indice de ventilacion sobre la altura de mezcla por parcela (m2/s).
+
+    Mismo concepto que 'vent', pero sin depender de PBLH. De noche los dos se
+    separan mucho, y es justo de noche cuando el humo se estanca.
+    """
+    tu, tv = _transport_mixh(nc, t)
+    return np.hypot(tu, tv)*d_mixh(nc, t)
 
 
 def d_wspd10(nc, t):
@@ -301,6 +456,14 @@ FIELDS = {
                 ["PH", "PHB", "HGT", "PBLH", "U", "V"]),
     "vent":    ("Indice de ventilacion",  "m2/s",  "depth",   d_vent,
                 ["PH", "PHB", "HGT", "PBLH", "U", "V"]),
+    "invtop":  ("Techo de la inversion",  "m",     "depth",   d_invtop,
+                ["PH", "PHB", "HGT", "T", "P", "PB", "U", "V"]),
+    "invdth":  ("Intensidad inversion",   "K",     "dry",     d_invdth,
+                ["PH", "PHB", "HGT", "T", "P", "PB", "U", "V"]),
+    "mixh":    ("Altura de mezcla",       "m",     "depth",   d_mixh,
+                ["PH", "PHB", "HGT", "T", "P", "PB", "T2", "PSFC", "U", "V"]),
+    "ventmh":  ("Ventilacion (mezcla)",   "m2/s",  "depth",   d_ventmh,
+                ["PH", "PHB", "HGT", "T", "P", "PB", "T2", "PSFC", "U", "V"]),
 }
 
 # --------------------------------------------------------------------------
@@ -341,6 +504,17 @@ SUMMARY = {
     "wchg10_max": ("wchg10", "Cambio de viento maximo",       "dry"),
 }
 
+# Resumenes de tipo "primera vez que se supera un umbral". No es lo mismo que
+# la hora del maximo: al operativo no le importa cuando la capa de mezcla es
+# mas profunda, sino a partir de que hora deja de estar por debajo de la cota a
+# la que necesitan volar. Donde no se supera nunca, se codifica con la hora
+# final + un paso, y el visor lo etiqueta como "no rompe".
+#
+# clave -> (campo de origen, umbral por defecto, etiqueta, paleta)
+FIRST_ABOVE = {
+    "mixh_ruptura": ("mixh", 500.0, "Hora de ruptura de la inversion", "hours"),
+}
+
 DEFAULT_VARS = ["wspd10", "gust10", "wchg10", "t2", "rh2", "td2", "pblh",
                 "u10", "v10"]
 
@@ -348,13 +522,20 @@ DEFAULT_VARS = ["wspd10", "gust10", "wchg10", "t2", "rh2", "td2", "pblh",
 # defecto porque leen 64 niveles de U, V, T, P, PH y PHB en cada instante, del
 # orden de un gigabyte de lectura por paso temporal. Se piden explicitamente:
 #   --vars "$(python3 -c 'from pack_wrf_surface import *; print(",".join(DEFAULT_VARS+LEVEL_VARS))')"
-LEVEL_VARS = ["hdw", "wtrans", "wtransdir", "vent"]
+LEVEL_VARS = ["hdw", "wtrans", "wtransdir", "vent",
+              "invtop", "invdth", "mixh", "ventmh"]
+
+# Subconjunto de LEVEL_VARS que contesta la pregunta del humo y los medios
+# aereos. Comparten la lectura de niveles con el resto de productos de niveles
+# (levels() cachea por instante), asi que pedirlos junto a hdw/wtrans/vent no
+# multiplica el coste de E/S; pedirlos solos ya cuesta la lectura completa.
+INVERSION_VARS = ["invtop", "invdth", "mixh", "ventmh"]
 
 # Cubo transpuesto para los meteogramas: [tiempo, punto] por variable. Se
 # guardan u10/v10 en vez de velocidad y direccion porque la direccion es una
 # magnitud circular y no se puede interpolar ni cuantizar sin cuidado; el
 # visor deriva ambas de las componentes.
-METEO_VARS = ["t2", "rh2", "u10", "v10"]
+METEO_VARS = ["t2", "rh2", "u10", "v10", "invtop", "invdth"]
 
 # Rangos fijos donde una escala estable importa mas que ajustarse a los datos.
 FIXED_RANGE = {
@@ -457,6 +638,10 @@ def main() -> int:
     ap.add_argument("--meteo-stride", type=int, default=4,
                     help="submuestreo espacial del cubo de meteogramas "
                          "(4 = un punto cada 4 de malla; 0 lo desactiva)")
+    ap.add_argument("--break-mh", type=float, default=500.0,
+                    help="umbral de altura de mezcla (m sobre el terreno) para "
+                         "el campo de hora de ruptura. Deberia ser la cota a la "
+                         "que el operativo necesita volar, no un valor generico")
     args = ap.parse_args()
 
     keys = list(FIELDS) if args.vars.strip() == "all" else [
@@ -563,7 +748,8 @@ def main() -> int:
 
     print("[3/4] Escribiendo campos...")
     manifest_fields = []
-    summ_src = {v[0] for v in SUMMARY.values()}
+    summ_src = ({v[0] for v in SUMMARY.values()}
+                | {v[0] for v in FIRST_ABOVE.values()})
     summ_cache = {k: dict(cache[k]) for k in keys if k in summ_src}
     for k in keys:
         label, units, cmap, _, _ = FIELDS[k] if k in FIELDS else SERIES[k]
@@ -615,6 +801,38 @@ def main() -> int:
                     "vmin": lo, "vmax": hi, "files": [rel], "single": True,
                 })
                 print(f"      {name+suf:16s} [{lo:g}, {hi:g}] {un}")
+
+    # --- primera hora en que se supera un umbral ---
+    if summ_cache and len(times) > 1:
+        from datetime import datetime as _dt3
+        f = "%Y-%m-%dT%H:%M:%SZ"
+        t0 = _dt3.strptime(times[0], f)
+        hrs = np.array([(_dt3.strptime(x, f) - t0).total_seconds()/3600.0
+                        for x in times], dtype=np.float32)
+        step = float(hrs[1] - hrs[0]) if len(hrs) > 1 else 1.0
+        nunca = float(hrs[-1]) + step        # centinela: no se supera nunca
+
+        for name, (src, thr_def, label, cmap) in FIRST_ABOVE.items():
+            if src not in summ_cache:
+                continue
+            thr = args.break_mh if src == "mixh" else thr_def
+            stack = np.stack([summ_cache[src][n] for n in range(len(index))])
+            above = stack > thr
+            has = above.any(axis=0)
+            arr = np.where(has, hrs[np.argmax(above, axis=0)], nunca)
+            arr = arr.astype(np.float32)
+
+            rel = f"summary/{name}.png"
+            encode_png16(os.path.join(args.outdir, rel), arr, 0.0, nunca)
+            manifest_fields.append({
+                "key": name, "label": f"{label} (>{thr:g} m)",
+                "units": "h desde el inicio", "cmap": cmap,
+                "vmin": 0.0, "vmax": nunca, "files": [rel], "single": True,
+                "sentinel": nunca, "threshold": thr,
+            })
+            frac = 100.0*float(has.mean())
+            print(f"      {name:16s} umbral {thr:g} m, rompe en el "
+                  f"{frac:.0f} % del dominio (centinela {nunca:g} h)")
 
     print("[4/4] Escribiendo estaticos y manifest...")
     statics = {}
