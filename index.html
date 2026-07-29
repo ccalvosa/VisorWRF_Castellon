@@ -2332,7 +2332,7 @@ function drawMeteogram(){
  * ------------------------------------------------------------------ */
 const SND = { data:null, loading:false, idx:0, hover:null };
 const SND_ZTOP = 2500;      // altura mostrada; la inversion vive muy por debajo
-const SND_GAMMA = 0.005;    // mismo umbral que invtop en el empaquetado
+const SND_EXC = 0.5;        // exceso de la parcela sobre theta del primer nivel
 
 async function loadSoundings(){
   if (SND.data || SND.loading) return SND.data;
@@ -2409,20 +2409,28 @@ function buildSoundingChips(){
   });
 }
 
-// Techo de la primera capa estable de una columna, con el mismo criterio que
-// el campo invtop del empaquetado: primera capa con dtheta/dz por encima del
-// umbral contando desde el suelo, y su primer nivel no estable por encima.
-function invTopOf(z, th){
-  let kb = -1;
-  for (let k=0;k<z.length-1;k++){
-    if (z[k] > 3000) break;
-    if ((th[k+1]-th[k])/Math.max(z[k+1]-z[k], 1e-6) >= SND_GAMMA){ kb = k; break; }
+// Altura de mezcla por metodo de parcela (Holzworth): se sube una parcela desde
+// el nivel mas bajo con un exceso de SND_EXC y se corta con el perfil.
+//
+// Es lo que se dibuja, y no el techo de la primera capa estable, porque con los
+// 16 niveles que este dominio tiene hasta 4 km el criterio de gradiente se cuela
+// por la capa residual nocturna y devuelve el techo de toda la columna estable:
+// medido sobre este mismo punto, saltaba 11.099 m entre pasos frente a los 1.718
+// de la parcela, y dejaba instantes sin deteccion. La parcela ademas es la misma
+// magnitud que el campo mixh del mapa, asi que grafico y mapa cuentan lo mismo.
+//
+// Diferencia menor con mixh: alli la parcela parte de theta a 2 m y aqui del
+// primer nivel del modelo, unos 26 m. Puede dar unas decenas de metros de mas.
+function mixHeightOf(z, th){
+  const thp = th[0] + SND_EXC;
+  for (let k=0;k<z.length;k++){
+    if (th[k] >= thp){
+      if (k === 0) return z[0];
+      const f = (thp - th[k-1])/Math.max(th[k]-th[k-1], 1e-6);
+      return z[k-1] + f*(z[k]-z[k-1]);
+    }
   }
-  if (kb < 0) return null;
-  for (let k=kb;k<z.length-1;k++)
-    if ((th[k+1]-th[k])/Math.max(z[k+1]-z[k], 1e-6) < SND_GAMMA)
-      return { base: z[kb], top: z[k] };
-  return { base: z[kb], top: z[z.length-1] };
+  return z[z.length-1];
 }
 
 function interpAt(z, v, h){
@@ -2450,14 +2458,23 @@ function drawSounding(){
   const { L, R, T, B } = SGEO;
   const pw = Math.max(W - L - R, 1), ph = Math.max(H - T - B, 1);
   const n = p.theta.length;
+
+  // La ventana vertical se adapta al punto: con la capa de mezcla en decenas de
+  // metros de noche, una escala fija de 2500 m deja la linea pegada al eje y no
+  // se lee nada. Se toma el triple del maximo, redondeado a 500 m.
+  const mix = [];
+  for (let t=0;t<n;t++) mix.push(mixHeightOf(p.z[t], p.theta[t]));
+  const ZT = Math.max(1000, Math.min(SND_ZTOP,
+             Math.ceil(3*Math.max(...mix)/500)*500));
+
   const X = t => L + (n === 1 ? pw/2 : pw*t/(n-1));
-  const Y = h => T + ph - ph*Math.min(h, SND_ZTOP)/SND_ZTOP;
+  const Y = h => T + ph - ph*Math.min(h, ZT)/ZT;
 
   // rango de theta del punto, sobre la ventana mostrada
   let lo = Infinity, hi = -Infinity;
   for (let t=0;t<n;t++)
     for (let k=0;k<p.z[t].length;k++)
-      if (p.z[t][k] <= SND_ZTOP){
+      if (p.z[t][k] <= ZT){
         lo = Math.min(lo, p.theta[t][k]); hi = Math.max(hi, p.theta[t][k]);
       }
   if (!(hi > lo)){ lo -= 1; hi += 1; }
@@ -2466,13 +2483,20 @@ function drawSounding(){
   // eta no son equiespaciados y un mapa de celdas dejaria escalones gruesos
   // justo abajo, que es donde esta la inversion.
   const lut = lutBytes('thermal');
-  const img = c.createImageData(Math.round(pw), Math.round(ph));
-  const iw = img.width, ih = img.height;
+  // Se rasteriza a un canvas fuera de pantalla y se vuelca con drawImage. No
+  // se puede usar putImageData directamente: ignora la transformacion del
+  // contexto y trabaja en pixeles de dispositivo, asi que con devicePixelRatio
+  // 2 pintaba a mitad de tamano y el grafico se cortaba por la mitad.
+  const off = document.createElement('canvas');
+  const iw = Math.max(1, Math.round(pw)), ih = Math.max(1, Math.round(ph));
+  off.width = iw; off.height = ih;
+  const oc = off.getContext('2d');
+  const img = oc.createImageData(iw, ih);
   for (let px=0; px<iw; px++){
     const t = n === 1 ? 0 : Math.round(px/(iw-1)*(n-1));
     const z = p.z[t], th = p.theta[t];
     for (let py=0; py<ih; py++){
-      const h = SND_ZTOP*(1 - py/(ih-1));
+      const h = ZT*(1 - py/(ih-1));
       const q = (interpAt(z, th, h) - lo)/(hi - lo);
       const ci = Math.max(0, Math.min(255, Math.round(q*255)))*4;
       const o = (py*iw + px)*4;
@@ -2482,7 +2506,9 @@ function drawSounding(){
       img.data[o+3] = 255;
     }
   }
-  c.putImageData(img, Math.round(L), Math.round(T));
+  oc.putImageData(img, 0, 0);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(off, L, T, pw, ph);
 
   const CSS = getComputedStyle(document.documentElement);
   const mid  = CSS.getPropertyValue('--fg-dim').trim() || '#7d8c9a';
@@ -2490,26 +2516,28 @@ function drawSounding(){
   c.font = '10px ui-monospace, Menlo, Consolas, monospace';
 
   // techo de la capa estable
-  c.strokeStyle = '#f2f6f8'; c.lineWidth = 2; c.beginPath();
-  let started = false;
+  c.save();
+  c.beginPath(); c.rect(L, T, pw, ph); c.clip();
+  c.strokeStyle = '#f2f6f8'; c.lineWidth = 2.2; c.beginPath();
   for (let t=0;t<n;t++){
-    const iv = invTopOf(p.z[t], p.theta[t]);
-    if (!iv){ started = false; continue; }
-    const x = X(t), y = Y(iv.top);
-    started ? c.lineTo(x, y) : c.moveTo(x, y);
-    started = true;
+    const x = X(t), y = Y(mix[t]);
+    t ? c.lineTo(x, y) : c.moveTo(x, y);
   }
   c.stroke();
+  c.restore();
 
   // ejes
   c.fillStyle = mid; c.strokeStyle = line; c.lineWidth = 1;
   c.textAlign = 'right';
-  for (let h=0; h<=SND_ZTOP; h+=500){
+  const hst = ZT <= 1000 ? 200 : ZT <= 2000 ? 250 : 500;
+  for (let h=0; h<=ZT; h+=hst){
     const y = Math.round(Y(h)) + .5;
     c.beginPath(); c.moveTo(L, y); c.lineTo(L+pw, y); c.stroke();
     c.fillText(String(h), L-5, y+3);
   }
-  c.fillText('m', L-5, T-2);
+  c.textAlign = 'left';
+  c.fillText('m', 4, T+7);
+  c.textAlign = 'right';
   c.textAlign = 'center';
   const tev = Math.max(1, Math.ceil(n/10));
   for (let t=0;t<n;t+=tev)
@@ -2526,7 +2554,6 @@ function drawSounding(){
   if (hv){
     const t = hv.t, h = hv.h;
     const z = p.z[t], th = p.theta[t];
-    const iv = invTopOf(z, th);
     const xh = Math.round(X(t)) + .5, yh = Math.round(Y(h)) + .5;
     c.strokeStyle = '#f2f6f8'; c.setLineDash([3,3]); c.lineWidth = 1;
     c.beginPath(); c.moveTo(xh, T); c.lineTo(xh, T+ph);
@@ -2540,7 +2567,7 @@ function drawSounding(){
       ['Td', interpAt(z, p.td[t], h).toFixed(1) + ' \u00b0C'],
       ['V',  Math.hypot(interpAt(z, p.u[t], h),
                         interpAt(z, p.v[t], h)).toFixed(1) + ' m/s'],
-      ['Inv', iv ? iv.top.toFixed(0) + ' m' : 'sin capa'],
+      ['Mezcla', mix[t].toFixed(0) + ' m'],
     ];
     let bw = 0;
     for (const [k, v] of rows)
@@ -2561,6 +2588,8 @@ function drawSounding(){
     });
   }
 
+  SND.zt = ZT;
+
   const u2 = utm(p.lat, p.lon);
   $('sndtitle').innerHTML =
     `${p.name} · ${p.lat.toFixed(4)}\u00b0N ${p.lon.toFixed(4)}\u00b0E · `
@@ -2570,9 +2599,9 @@ function drawSounding(){
         ? ` <span style="color:#f0a33c">a ${(SND.clickDist*1000).toFixed(0)} m `
           + `de donde pinchaste</span>` : '');
   $('sndfoot').innerHTML =
-    `Tiempo-altura de temperatura potencial. La linea blanca es el techo de la `
-    + `primera capa estable: por debajo queda atrapado el humo, y donde se `
-    + `interrumpe es que no hay capa. `
+    `Tiempo-altura de temperatura potencial. La linea blanca es la altura de `
+    + `mezcla: por debajo queda atrapado el humo emitido en superficie. Es la `
+    + `misma magnitud que el campo "Altura de mezcla" del mapa. `
     + (p.frp !== undefined
         ? `Punto derivado de un foco FIRMS de ${p.frp} MW. ` : '')
     + `El punto de malla esta a ${(p.dist_km*1000).toFixed(0)} m del `
@@ -2595,7 +2624,7 @@ function sndPick(ev){
   }
   const n = p.theta.length;
   SND.hover = { t: Math.max(0, Math.min(n-1, Math.round(fx*(n-1)))),
-                h: Math.max(0, Math.min(SND_ZTOP, SND_ZTOP*(1-fy))) };
+                h: Math.max(0, Math.min(SND.zt, SND.zt*(1-fy))) };
   drawSounding();
 }
 
